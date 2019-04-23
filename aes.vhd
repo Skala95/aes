@@ -278,7 +278,7 @@ begin
     end process;
     
     -- datapath: routing multiplexer
-    process(i_reg, j_reg, round_reg,  t_reg, temp_reg, tm_reg, tmp_reg, roundKey_reg, key_reg, plaintext_reg, pi_key, pi_start, first_reg, state_reg, pi_plaintext)
+    process(i_reg, j_reg, round_reg,  t_reg, temp_reg, tm_reg, tmp_reg, roundKey_reg, key_reg, plaintext_reg, pi_key, pi_start, first_reg, done_reg, state_reg, pi_plaintext)
     begin
         i_next <= i_reg;
         j_next <= j_reg;
