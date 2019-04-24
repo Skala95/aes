@@ -315,12 +315,12 @@ begin
                  tmp_next(to_integer(unsigned(j_reg))) <= roundKey_reg(((to_integer(unsigned(i_reg)))-1)*4 + (to_integer(unsigned(j_reg))));
                  j_next <= (std_logic_vector(unsigned(j_reg) + 1));
             when key_extension3 =>
-                 tmp_next(0) <= tmp_reg(1); -- missing getSbox
-                 tmp_next(1) <= tmp_reg(2); --  -||-
-                 tmp_next(2) <= tmp_reg(3); --  -||-
-                 tmp_next(3) <= tmp_reg(0); --  -||-
+                 tmp_next(0) <= sbox(to_integer(unsigned(tmp_reg(1)))); -- missing getSbox
+                 tmp_next(1) <= sbox(to_integer(unsigned(tmp_reg(2)))); --  -||-
+                 tmp_next(2) <= sbox(to_integer(unsigned(tmp_reg(3)))); --  -||-
+                 tmp_next(3) <= sbox(to_integer(unsigned(tmp_reg(0)))); --  -||-
             when key_extension4 =>
-                 --tmp_next(0) <= tmp_reg(0) xor rcon(to_integer(unsigned("00" & i_reg(5 downto 2)))); -- missing xor rcon(i_reg/Nk)
+                 tmp_next(0) <= tmp_reg(0) xor rcon(to_integer(unsigned(std_logic_vector'("00" & i_reg(5 downto 2))))); -- missing xor rcon(i_reg/Nk)
             when key_extension5 =>
                  roundKey_next((to_integer(unsigned(i_reg)))*4) <= roundKey_reg(((to_integer(unsigned(i_reg)))-Nk)*4) xor tmp_reg(0);
                  roundKey_next((to_integer(unsigned(i_reg)))*4+1) <= roundKey_reg(((to_integer(unsigned(i_reg)))-Nk)*4+1) xor tmp_reg(1); 
@@ -345,7 +345,7 @@ begin
             when sub_bytes2 =>
                  j_next <= (others => '0');
             when sub_bytes3 =>
-                 plaintext_next((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) <=  plaintext_reg((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))); -- missing getSbox
+                 plaintext_next((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) <=  sbox(to_integer(unsigned(plaintext_reg((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg))))))); -- missing getSbox
                  j_next <= (std_logic_vector(unsigned(j_reg) + 1));
             when sub_bytes4 =>
                  i_next <= (std_logic_vector(unsigned(i_reg) + 1));
