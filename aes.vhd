@@ -138,7 +138,7 @@ begin
                     state_next <= idle;
                end if;
             when key_extension1 =>
-                if(i_reg = std_logic_vector(to_unsigned(Nk,5))) then
+                if(i_next = std_logic_vector(to_unsigned(Nk-1,5))) then
                     state_next <= key_extension2;
                 else
                     state_next <= key_extension1; 
@@ -308,8 +308,8 @@ begin
                  roundKey_next((to_integer(unsigned(i_reg)))*4+2) <= key_reg((to_integer(unsigned(i_reg)))*4+2);
                  roundKey_next((to_integer(unsigned(i_reg)))*4+3) <= key_reg((to_integer(unsigned(i_reg)))*4+3);
                  i_next <= (std_logic_vector(unsigned(i_reg) + 1));
-                 if(i_reg = std_logic_vector(to_unsigned(Nk,5))) then
-                    j_next <= (others => '0'); 
+                 if(i_next = std_logic_vector(to_unsigned(Nk-1,5))) then
+                    j_next <= (others => '0');
                  end if;
             when key_extension2 =>
                  tmp_next(to_integer(unsigned(j_reg))) <= roundKey_reg(((to_integer(unsigned(i_reg)))-1)*4 + (to_integer(unsigned(j_reg))));
@@ -327,7 +327,7 @@ begin
                  roundKey_next((to_integer(unsigned(i_reg)))*4+2) <= roundKey_reg(((to_integer(unsigned(i_reg)))-Nk)*4+2) xor tmp_reg(2);
                  roundKey_next((to_integer(unsigned(i_reg)))*4+3) <= roundKey_reg(((to_integer(unsigned(i_reg)))-Nk)*4+3) xor tmp_reg(3);
                  i_next <= (std_logic_vector(unsigned(i_reg)+1));
-                 if(i_reg = X"2C") then --44 in decimal
+                 if(i_next = X"2C") then --44 in decimal
                     i_next <= (others => '0');
                  end if;
             when add_round_key_0_1 =>
@@ -337,7 +337,7 @@ begin
                  j_next <= (std_logic_vector(unsigned(j_reg) + 1));
             when add_round_key_0_3 =>
                  i_next <= (std_logic_vector(unsigned(i_reg) + 1));
-                 if(i_reg = "100") then
+                 if(i_next = "100") then
                      round_next <= "00001";
                  end if;
             when sub_bytes1 =>
@@ -371,16 +371,16 @@ begin
                  tm_next <= plaintext_reg((to_integer(unsigned(i_reg)))*4) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+1);
                  temp_next <= plaintext_reg(((to_integer(unsigned(i_reg)))*4)) xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+1) xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+2) xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+3);
             when mix_columns2 =>
-                 --plaintext_next((to_integer(unsigned(i_reg)))*4) <= std_logic_vector(unsigned((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") xor temp_reg xor plaintext_reg((to_integer(unsigned(i_reg)))*4);
+                 plaintext_next((to_integer(unsigned(i_reg)))*4) <= std_logic_vector("abs"(signed((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") (7 downto 0)) xor temp_reg xor plaintext_reg((to_integer(unsigned(i_reg)))*4);
                  tm_next <= plaintext_reg((to_integer(unsigned(i_reg)))*4+1) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+2);
             when mix_columns3 => 
-                 --plaintext_next(((to_integer(unsigned(i_reg)))*4)+1) <= std_logic_vector(unsigned((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+1);
+                 plaintext_next(((to_integer(unsigned(i_reg)))*4)+1) <= std_logic_vector("abs"(signed((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") (7 downto 0)) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+1);
                  tm_next <= plaintext_reg((to_integer(unsigned(i_reg)))*4+2) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+3); 
             when mix_columns4 =>
-                 --plaintext_next(((to_integer(unsigned(i_reg)))*4)+2) <= std_logic_vector(unsigned((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+2);
+                 plaintext_next(((to_integer(unsigned(i_reg)))*4)+2) <= std_logic_vector("abs"(signed((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") (7 downto 0)) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+2);
                  tm_next <= plaintext_reg((to_integer(unsigned(i_reg)))*4+3) xor t_reg;
             when mix_columns5 =>
-                 --plaintext_next(((to_integer(unsigned(i_reg)))*4)+3) <= std_logic_vector(unsigned((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+3);
+                 plaintext_next(((to_integer(unsigned(i_reg)))*4)+3) <= std_logic_vector("abs"(signed((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") (7 downto 0)) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+3);
                  i_next <= (std_logic_vector(unsigned(i_reg) + 1));
                  if(i_reg = "100") then
                      i_next <= (others => '0');
