@@ -106,9 +106,12 @@ architecture Behavioral of aes is
     signal round_reg, round_next : std_logic_vector(4 downto 0);
     signal tmp_reg, tmp_next : tmp_coef_t;
     signal t_reg, t_next, temp_reg, temp_next, tm_reg, tm_next : std_logic_vector(BYTE-1 downto 0);
-    signal first_reg, first_next, done_reg, done_next : std_logic;
-    signal key_next, key_reg, plaintext_reg, plaintext_next : coef_t ; --ciphertext_reg, ciphertext_reg : coef_t;    
+    signal first_reg, first_next: std_logic;
+    signal done_reg, done_next : std_logic;
+    signal key_next, key_reg, plaintext_reg, plaintext_next : coef_t ; 
+ 
     
+    constant CONST_TMP: std_logic_vector(7 downto 0):="00011011";
             
 begin
 
@@ -124,7 +127,7 @@ begin
     end process; 
     
     -- control path: next-state/output logic
-    process (state_reg, pi_start, j_next, i_next, i_reg, round_reg, first_reg)
+    process (state_reg, pi_start, j_reg, i_reg, round_reg, first_reg)
     begin
         case state_reg is
             when idle =>
@@ -139,7 +142,7 @@ begin
                end if;
             when key_extension1 =>
                 --if(i_next = std_logic_vector(to_unsigned(Nk-1,5))) then
-                if(to_integer(unsigned(i_next)) = Nk) then 
+                if(to_integer(unsigned(i_reg)) = Nk-1) then 
                     state_next <= key_extension2;
                 else
                     state_next <= key_extension1; 
@@ -147,8 +150,8 @@ begin
             when key_extension2 =>
                 state_next <= key_extension3;
             when key_extension3 => 
-                if (to_integer(unsigned(j_next)) = 4)then
-                    if(i_next(1 downto 0) = "00" ) then
+                if (to_integer(unsigned(j_reg)) = 3)then
+                    if(i_reg(1 downto 0) = "00" ) then
                         state_next <= key_extension4;
                     else
                         state_next <= key_extension6;
@@ -161,7 +164,7 @@ begin
             when key_extension5 =>
                 state_next <= key_extension6;
             when key_extension6 =>
-                if(to_integer(unsigned(i_reg)) = (Nb*(Nr+1))) then --44 in decimal
+                if(to_integer(unsigned(i_reg)) = (Nb*(Nr+1)-1)) then --43 in decimal
                     state_next <= add_round_key_0_1;
                 else
                     state_next <= key_extension2; 
@@ -169,13 +172,13 @@ begin
             when add_round_key_0_1 =>
                 state_next <= add_round_key_0_2;
             when add_round_key_0_2 =>
-                if(to_integer(unsigned(j_next)) = 4) then
+                if(to_integer(unsigned(j_reg)) = 3) then
                     state_next <= add_round_key_0_3;
                 else 
                     state_next <= add_round_key_0_2;
                 end if;
             when add_round_key_0_3 =>
-                if(to_integer(unsigned(i_next)) = 4) then
+                if(to_integer(unsigned(i_reg)) = 3) then
                     state_next <= sub_bytes1;
                 else
                     state_next <= add_round_key_0_1;
@@ -185,19 +188,19 @@ begin
             when sub_bytes2 =>
                 state_next <= sub_bytes3;
             when sub_bytes3 =>
-                if(to_integer(unsigned(j_next)) = 4) then
+                if(to_integer(unsigned(j_reg)) = 3) then
                     state_next <= sub_bytes4;
                 else
                     state_next <= sub_bytes3;
                 end if;
             when sub_bytes4 =>
-                if(to_integer(unsigned(i_next)) = 4) then
+                if(to_integer(unsigned(i_reg)) = 3) then
                     state_next <= shift_rows;
                 else
                     state_next <= sub_bytes2;
                 end if;
             when shift_rows =>
-                if(to_integer(unsigned(round_next)) = Nr) then
+                if(to_integer(unsigned(round_reg)) = Nr) then
                     state_next <= add_round_key_round_1;
                 else
                     state_next <= mix_columns1;
@@ -211,7 +214,7 @@ begin
             when mix_columns4 =>
                 state_next <= mix_columns5;            
             when mix_columns5 =>
-                if(to_integer(unsigned(i_next)) = 4) then
+                if(to_integer(unsigned(i_reg)) = 3) then
                     state_next <= add_round_key_round_1;
                 else 
                     state_next <= mix_columns1;
@@ -219,19 +222,19 @@ begin
             when add_round_key_round_1 =>
                 state_next <= add_round_key_round_2;
             when add_round_key_round_2 =>
-                if(to_integer(unsigned(j_next)) = 4) then
+                if(to_integer(unsigned(j_reg)) = 3) then
                     state_next <= add_round_key_round_3;
                 else
                     state_next <= add_round_key_round_2;  
                 end if;
             when add_round_key_round_3 =>
-                if(to_integer(unsigned(i_next)) = 4) then
+                if(to_integer(unsigned(i_reg)) = 3) then
                     state_next <= check_round;
                 else
                     state_next <= add_round_key_round_1;
                 end if;
             when check_round =>
-                if(to_integer(unsigned(round_next)) = Nr+1) then
+                if(to_integer(unsigned(round_reg)) = Nr) then
                     state_next <= idle;
                 else 
                     state_next <= sub_bytes1;
@@ -241,6 +244,7 @@ begin
 
     -- control path: output logic
     po_ready <= '1' when state_reg = idle else '0';
+
 
     --data path: data register
     process (pi_clk, pi_reset)
@@ -281,7 +285,7 @@ begin
     end process;
     
     -- datapath: routing multiplexer
-    process(i_reg, j_reg, round_reg,  t_reg, temp_reg, tm_reg, tmp_reg, roundKey_reg, key_reg, plaintext_reg, pi_key, pi_start, first_reg, done_reg, state_reg, pi_plaintext)
+    process(i_reg, j_reg, round_reg,  t_reg, temp_reg, tm_reg, tmp_reg, roundKey_reg, key_reg, plaintext_reg, pi_key, pi_start, first_reg, state_reg, pi_plaintext, done_reg)
     begin
         i_next <= i_reg;
         j_next <= j_reg;
@@ -305,6 +309,7 @@ begin
                     i_next <= (others => '0');
                     round_next <= (others => '0');
                 end if;
+                done_next <= '0';
             when key_extension1 =>
                  roundKey_next((to_integer(unsigned(i_reg)))*4) <= key_reg((to_integer(unsigned(i_reg)))*4);
                  roundKey_next((to_integer(unsigned(i_reg)))*4+1) <= key_reg((to_integer(unsigned(i_reg)))*4+1);
@@ -328,7 +333,7 @@ begin
                  roundKey_next((to_integer(unsigned(i_reg)))*4+1) <= roundKey_reg(((to_integer(unsigned(i_reg)))-Nk)*4+1) xor tmp_reg(1); 
                  roundKey_next((to_integer(unsigned(i_reg)))*4+2) <= roundKey_reg(((to_integer(unsigned(i_reg)))-Nk)*4+2) xor tmp_reg(2);
                  roundKey_next((to_integer(unsigned(i_reg)))*4+3) <= roundKey_reg(((to_integer(unsigned(i_reg)))-Nk)*4+3) xor tmp_reg(3);
-                 if(to_integer(unsigned(i_next)) = (Nb*(Nr+1))) then --44 in decimal
+                 if(to_integer(unsigned(i_reg)) = (Nb*(Nr+1)-1)) then --44 in decimal
                     i_next <= (others => '0');
                  else
                     i_next <= (std_logic_vector(unsigned(i_reg)+1));
@@ -343,7 +348,7 @@ begin
                  j_next <= (std_logic_vector(unsigned(j_reg) + 1));
             when add_round_key_0_3 =>
                  i_next <= (std_logic_vector(unsigned(i_reg) + 1));
-                 if(to_integer(unsigned(i_reg)) = 4) then
+                 if(to_integer(unsigned(i_reg)) = 3) then
                      round_next <= "00001";
                  end if;
             when sub_bytes1 =>
@@ -372,30 +377,31 @@ begin
                  plaintext_next(11) <= plaintext_reg(7);
                  plaintext_next(15) <= plaintext_reg(11);
                  i_next <= (others => '0');
+                 j_next <= (others => '0');
             when mix_columns1 =>
                  t_next <= plaintext_reg((to_integer(unsigned(i_reg)))*4);
                  tm_next <= plaintext_reg((to_integer(unsigned(i_reg)))*4) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+1);
                  temp_next <= plaintext_reg(((to_integer(unsigned(i_reg)))*4)) xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+1) xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+2) xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+3);
             when mix_columns2 =>
-                 plaintext_next((to_integer(unsigned(i_reg)))*4) <= std_logic_vector("abs"(signed((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") (7 downto 0)) xor temp_reg xor plaintext_reg((to_integer(unsigned(i_reg)))*4);
+                 plaintext_next((to_integer(unsigned(i_reg)))*4) <= (tm_reg(6 downto 0) & '0') xor (std_logic_vector(resize((shift_right(unsigned(tm_reg), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor plaintext_reg((to_integer(unsigned(i_reg)))*4);
+                 -- tm_next <= std_logic_vector("abs"(signed((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") (7 downto 0));
+                 --tm_next <= (tm_reg(6 downto 0) & '0') xor std_logic_vector("abs"(signed("0000000" & tm_reg(7)) * "00011011") (7 downto 0));
+                 --  tm_next <= (tm_reg(6 downto 0) & '0') xor (std_logic_vector(resize((shift_right(signed(tm_reg), 7) * signed(CONST_TMP)), 8)));
                  tm_next <= plaintext_reg((to_integer(unsigned(i_reg)))*4+1) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+2);
             when mix_columns3 => 
-                 plaintext_next(((to_integer(unsigned(i_reg)))*4)+1) <= std_logic_vector("abs"(signed((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") (7 downto 0)) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+1);
+                 plaintext_next(((to_integer(unsigned(i_reg)))*4)+1) <= (tm_reg(6 downto 0) & '0') xor (std_logic_vector(resize((shift_right(unsigned(tm_reg), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+1);
                  tm_next <= plaintext_reg((to_integer(unsigned(i_reg)))*4+2) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+3); 
             when mix_columns4 =>
-                 plaintext_next(((to_integer(unsigned(i_reg)))*4)+2) <= std_logic_vector("abs"(signed((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") (7 downto 0)) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+2);
+                 plaintext_next(((to_integer(unsigned(i_reg)))*4)+2) <= (tm_reg(6 downto 0) & '0') xor (std_logic_vector(resize((shift_right(unsigned(tm_reg), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+2);
                  tm_next <= plaintext_reg((to_integer(unsigned(i_reg)))*4+3) xor t_reg;
             when mix_columns5 =>
-                 plaintext_next(((to_integer(unsigned(i_reg)))*4)+3) <= std_logic_vector("abs"(signed((tm_reg(6 downto 0) & '0') xor ("0000000" & (tm_reg(7) and '1'))) * x"1b") (7 downto 0)) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+3);
-                 if(to_integer(unsigned(i_reg)) = 4) then
+                 plaintext_next(((to_integer(unsigned(i_reg)))*4)+3) <= (tm_reg(6 downto 0) & '0') xor (std_logic_vector(resize((shift_right(unsigned(tm_reg), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+3);
+                 if(to_integer(unsigned(i_reg)) = 3) then
                     i_next <= (others => '0');
                  else 
                     i_next <= (std_logic_vector(unsigned(i_reg) + 1));
                  end if;
             when add_round_key_round_1 =>
-                 if(to_integer(unsigned(i_reg)) = 4) then
-                    i_next <= (others => '0');
-                 end if;
                  j_next <= (others => '0');
             when add_round_key_round_2 =>
                  plaintext_next((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) <= plaintext_reg((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) xor  roundKey_reg((to_integer(unsigned(round_reg)))*Nb*4+(to_integer(unsigned(i_reg)))*Nb+(to_integer(unsigned(j_reg))));
@@ -404,9 +410,10 @@ begin
                  i_next <= (std_logic_vector(unsigned(i_reg) + 1));
             when check_round =>
                  round_next <= (std_logic_vector(unsigned(round_reg)+1));
-                 if(to_integer(unsigned(round_next)) = Nr+1) then
+                 if(to_integer(unsigned(round_reg)) = Nr) then
                     i_next <= (others => '0');
                     first_next <= '0';
+                    round_next <= "00000";
                     done_next <= '1';
                  end if;
             when others =>                              
@@ -418,25 +425,7 @@ begin
 
     --datapath: output
     po_data_valid <= '1' when done_reg = '1' else '0';
-    po_ciphertext <= plaintext_reg(15) & plaintext_reg(14) & plaintext_reg(13) & plaintext_reg(12) & plaintext_reg(11) & plaintext_reg(10) & plaintext_reg(9) & plaintext_reg(8)
-                    & plaintext_reg(7) & plaintext_reg(6) & plaintext_reg(5) & plaintext_reg(4) & plaintext_reg(3) & plaintext_reg(2) & plaintext_reg(1) & plaintext_reg(0) when done_reg = '1' else (others => '0');
-    
---    t <- state[0] [i]
---    Tmp <- state [0] [i] ^ state [1] [i] ^ state [2] [i] ^ state[3] [i] 
---    Tm <- state [0] [i] ^ state [1] [i]
---    Tm <- xtime(Tm)
---    state [0] [i] ^= Tm ^ Tmp
---    Tm <- state [1] [i] ^ state [2] [i]
---    Tm <- xtime(Tm)
---    state [1] [i] ^= Tm ^ Tmp
---    Tm <- state [2] [i] ^ state [3] [i] 
---    Tm <- xtime(Tm)
---    state [2] [i] ^= Tm ^ Tmp
---    Tm <- state [3] [i] ^ t
---    Tm <- xtime(Tm)
---    state[3] [i] ^= Tm ^ Tmp
---    i_next <- i + 1
---    i <- i_next
---    #define xtime(x)   ((x<<1) ^ (((x>>7) & 1) * 0x1b))
+    po_ciphertext <= plaintext_reg(0) & plaintext_reg(1) & plaintext_reg(2) & plaintext_reg(3) & plaintext_reg(4) & plaintext_reg(5) & plaintext_reg(6) & plaintext_reg(7)
+                    & plaintext_reg(8) & plaintext_reg(9) & plaintext_reg(10) & plaintext_reg(11) & plaintext_reg(12) & plaintext_reg(13) & plaintext_reg(14) & plaintext_reg(15) when done_reg = '1' else (others => '0');
 
 end Behavioral;
