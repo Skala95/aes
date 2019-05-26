@@ -57,23 +57,28 @@ begin
         po_ciphertext =>  ciphertext_s);
     clk_gen: process
     begin
-        wait for 50 ns;
+        wait for  1 ns;
         clk_s <= not clk_s;
     end process;
     
     stim_gen: process
     begin
-        key_s <= X"2b7e151628aed2a6abf7158809cf4f3c";
-        plaintext_s <= X"3243f6a8885a308d313198a2e0370734";
         reset_s <= '1';
         wait for 100 ns;
         reset_s <= '0';
         wait for 100 ns;
         wait until falling_edge(clk_s);
         start_s <= '1';
+        key_s <= X"2b7e151628aed2a6abf7158809cf4f3c";
+        plaintext_s <= X"3243f6a8885a308d313198a2e0370734";
         wait until ready_s = '1';
         start_s <= '0';
+        wait until falling_edge(data_valid_s);
+        wait for 50 ns;
+        assert false report "end of simulation" severity failure;
         wait;
+        
+        
     end process;
     
 end Behavioral;
