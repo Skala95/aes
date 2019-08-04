@@ -45,8 +45,12 @@ entity aes is
         pi_start      : in STD_LOGIC;
         pi_key        : in STD_LOGIC_VECTOR(WIDTH-1 downto 0);
         pi_plaintext  : in STD_LOGIC_VECTOR(WIDTH-1 downto 0);
-        po_ready      : out STD_LOGIC;
-        po_data_valid : out STD_LOGIC;        
+        --po_ready      : out STD_LOGIC;    --add if needed
+        pi_tready     : in STD_LOGIC;
+        pi_tvalid     : in STD_LOGIC;
+        po_tvalid     : out STD_LOGIC;
+        po_tready     : out STD_LOGIC;
+        po_done       : out STD_LOGIC;        
         po_ciphertext : out STD_LOGIC_VECTOR(WIDTH-1 downto 0));
 end aes;
 
@@ -105,10 +109,10 @@ architecture Behavioral of aes is
     signal i_reg, i_next : std_logic_vector (5 downto 0);
     signal round_reg, round_next : std_logic_vector(4 downto 0);
     signal tmp_reg, tmp_next : tmp_coef_t;
-    signal t_reg, t_next, temp_reg, temp_next, tm_reg, tm_next : std_logic_vector(BYTE-1 downto 0);
+    signal t_reg, t_next, temp_reg, temp_next : std_logic_vector(BYTE-1 downto 0);
     signal first_reg, first_next: std_logic;
     signal done_reg, done_next : std_logic;
-    signal key_next, key_reg, plaintext_reg, plaintext_next : coef_t ; 
+    signal key_next, key_reg, new_plaintext_reg, new_plaintext_next : coef_t ; 
  
     
     constant CONST_TMP: std_logic_vector(7 downto 0):="00011011";
@@ -117,25 +121,29 @@ begin
 
 
     -- control path: state register
-    process (pi_clk, pi_reset)
+    process (pi_clk)
     begin
-        if pi_reset = '1' then
-            state_reg <= idle;
-        elsif (pi_clk'event and pi_clk = '1') then
-            state_reg <= state_next;
+        if (pi_clk'event and pi_clk = '1') then
+            if pi_reset = '1' then
+                   state_reg <= idle;
+             else
+                state_reg <= state_next;
+             end if;
         end if;
     end process; 
     
     -- control path: next-state/output logic
-    process (state_reg, pi_start, j_reg, i_reg, round_reg, first_reg)
+    process (state_reg, pi_start, j_reg, i_reg, round_reg, first_reg, pi_tvalid)
     begin
         case state_reg is
             when idle =>
                if(pi_start = '1') then
-                   if(first_reg = '1') then
+                   if(first_reg = '1' and pi_tvalid = '1') then
                         state_next <= key_extension1;
-                   else
+                   elsif (pi_tvalid = '1') then
                         state_next <= add_round_key_0_1;
+                   else
+                        state_next <= idle;
                    end if;
                else
                     state_next <= idle;
@@ -238,73 +246,79 @@ begin
     end process;
 
     -- control path: output logic
-    po_ready <= '1' when state_reg = idle else '0';
-
+    po_tready <= '1' when (state_reg = idle and pi_start ='1') else '0';
+    --po_ready <= '1' when state_reg = idle else '0';
 
     --data path: data register
     process (pi_clk, pi_reset)
     begin
-        if(pi_reset = '1') then
-            i_reg <= (others => '0');
-            j_reg <= (others => '0');
-            round_reg <= (others => '0');
-            for i in 0 to 15 loop
-                plaintext_reg(i) <= (others => '0');
-                key_reg(i) <= (others => '0');
-            end loop;
-            t_reg <= (others => '0');
-            tm_reg <= (others => '0');
-            temp_reg <= (others => '0');
-            for i in 0 to 3 loop
-                tmp_reg(i) <= (others => '0');
-            end loop;
-            for i in 0 to 175 loop
-                roundKey_reg(i) <= (others => '0');
-            end loop;
-            first_reg <= '1';
-            done_reg <= '0';
-        elsif(pi_clk'event and pi_clk = '1') then  
-            i_reg <= i_next;
-            j_reg <= j_next;
-            round_reg <= round_next;
-            key_reg <= key_next;
-            plaintext_reg <= plaintext_next;
-            t_reg <= t_next;
-            temp_reg <= temp_next;
-            tm_reg <= tm_next;
-            tmp_reg <= tmp_next; 
-            roundKey_reg <= roundKey_next;
-            first_reg <= first_next;
-            done_reg <= done_next;
+        
+       if(pi_clk'event and pi_clk = '1') then
+            if(pi_reset = '1') then
+                   i_reg <= (others => '0');
+                   j_reg <= (others => '0');
+                   round_reg <= (others => '0');
+                   for i in 0 to 15 loop
+                       new_plaintext_reg(i) <= (others => '0');
+                       key_reg(i) <= (others => '0');
+                   end loop;
+                   t_reg <= (others => '0');
+                   temp_reg <= (others => '0');
+                   for i in 0 to 3 loop
+                       tmp_reg(i) <= (others => '0');
+                   end loop;
+                   for i in 0 to 175 loop
+                       roundKey_reg(i) <= (others => '0');
+                   end loop;
+                   first_reg <= '1';
+                   done_reg <= '0';
+            else  
+                i_reg <= i_next;
+                j_reg <= j_next;
+                round_reg <= round_next;
+                key_reg <= key_next;
+                new_plaintext_reg <= new_plaintext_next;
+                t_reg <= t_next;
+                temp_reg <= temp_next;
+                tmp_reg <= tmp_next; 
+                roundKey_reg <= roundKey_next;
+                first_reg <= first_next;
+                done_reg <= done_next;
+            end if;
         end if;
     end process;
     
     -- datapath: routing multiplexer
-    process(i_reg, j_reg, round_reg,  t_reg, temp_reg, tm_reg, tmp_reg, roundKey_reg, key_reg, plaintext_reg, pi_key, pi_start, first_reg, state_reg, pi_plaintext, done_reg)
+    process(i_reg, j_reg, round_reg,  pi_tvalid,t_reg, temp_reg, tmp_reg, roundKey_reg, key_reg, new_plaintext_reg, pi_key, pi_start, first_reg, state_reg, pi_plaintext, done_reg)
     begin
         i_next <= i_reg;
         j_next <= j_reg;
         round_next <= round_reg;
-        plaintext_next <= plaintext_reg;
+        new_plaintext_next <= new_plaintext_reg;
         key_next <= key_reg;
         t_next <= t_reg;
-        temp_next <= temp_reg;
-        tm_next <= tm_reg;
         tmp_next <= tmp_reg; 
+        temp_next <= temp_reg;
         roundKey_next <= roundKey_reg;
         first_next <= first_reg;
         done_next <= done_reg;
         case state_reg is
             when idle =>
-                for i in 0 to 15 loop
-                    key_next(15-i)(7 downto 0) <= pi_key((i*8+7) downto (8*i));
-                    plaintext_next(15-i)(7 downto 0) <= pi_plaintext((i*8+7) downto (8*i));
-                end loop;
                 if(pi_start = '1') then
+                    if(first_reg = '1') then
+                        for i in 0 to 15 loop
+                            key_next(15-i)(7 downto 0) <= pi_key((i*8+7) downto (8*i)); 
+                        end loop;
+                    end if;
+                    if (pi_tvalid = '1') then
+                        for i in 0 to 15 loop
+                            new_plaintext_next(15-i)(7 downto 0) <= pi_plaintext((i*8+7) downto (8*i));
+                        end loop;
+                    end if;                
                     i_next <= (others => '0');
                     round_next <= (others => '0');
+                    done_next <= '0';
                 end if;
-                done_next <= '0';
             when key_extension1 =>
                  roundKey_next((to_integer(unsigned(i_reg)))*4) <= key_reg((to_integer(unsigned(i_reg)))*4);
                  roundKey_next((to_integer(unsigned(i_reg)))*4+1) <= key_reg((to_integer(unsigned(i_reg)))*4+1);
@@ -336,7 +350,7 @@ begin
             when add_round_key_0_1 =>
                  j_next <= (others => '0');
             when add_round_key_0_2 =>
-                 plaintext_next((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) <= plaintext_reg((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) xor  roundKey_reg((to_integer(unsigned(round_reg)))*Nb*4+(to_integer(unsigned(i_reg)))*Nb+(to_integer(unsigned(j_reg))));
+                 new_plaintext_next((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) <= new_plaintext_reg((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) xor  roundKey_reg((to_integer(unsigned(round_reg)))*Nb*4+(to_integer(unsigned(i_reg)))*Nb+(to_integer(unsigned(j_reg))));
                  j_next <= (std_logic_vector(unsigned(j_reg) + 1));
             when add_round_key_0_3 =>
                  i_next <= (std_logic_vector(unsigned(i_reg) + 1));
@@ -348,36 +362,36 @@ begin
             when sub_bytes2 =>
                  j_next <= (others => '0');
             when sub_bytes3 =>
-                 plaintext_next((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) <=  sbox(to_integer(unsigned(plaintext_reg((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg))))))); -- missing getSbox
+                 new_plaintext_next((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) <=  sbox(to_integer(unsigned(new_plaintext_reg((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg))))))); -- missing getSbox
                  j_next <= (std_logic_vector(unsigned(j_reg) + 1));
             when sub_bytes4 =>
                  i_next <= (std_logic_vector(unsigned(i_reg) + 1));
             when shift_rows =>
                  --second row
-                 plaintext_next(1) <= plaintext_reg(5);
-                 plaintext_next(5) <= plaintext_reg(9);
-                 plaintext_next(9) <= plaintext_reg(13);
-                 plaintext_next(13) <= plaintext_reg(1);
+                 new_plaintext_next(1) <= new_plaintext_reg(5);
+                 new_plaintext_next(5) <= new_plaintext_reg(9);
+                 new_plaintext_next(9) <= new_plaintext_reg(13);
+                 new_plaintext_next(13) <= new_plaintext_reg(1);
                  --third row
-                 plaintext_next(2) <= plaintext_reg(10);
-                 plaintext_next(6) <= plaintext_reg(14);
-                 plaintext_next(10) <= plaintext_reg(2);
-                 plaintext_next(14) <= plaintext_reg(6); 
+                 new_plaintext_next(2) <= new_plaintext_reg(10);
+                 new_plaintext_next(6) <= new_plaintext_reg(14);
+                 new_plaintext_next(10) <= new_plaintext_reg(2);
+                 new_plaintext_next(14) <= new_plaintext_reg(6); 
                  --fourth row
-                 plaintext_next(3) <= plaintext_reg(15);
-                 plaintext_next(7) <= plaintext_reg(3);
-                 plaintext_next(11) <= plaintext_reg(7);
-                 plaintext_next(15) <= plaintext_reg(11);
+                 new_plaintext_next(3) <= new_plaintext_reg(15);
+                 new_plaintext_next(7) <= new_plaintext_reg(3);
+                 new_plaintext_next(11) <= new_plaintext_reg(7);
+                 new_plaintext_next(15) <= new_plaintext_reg(11);
                  i_next <= (others => '0');
                  j_next <= (others => '0');
             when mix_columns1 =>
-                  t_next <= plaintext_reg((to_integer(unsigned(i_reg)))*4);
-                  temp_next <= plaintext_reg(((to_integer(unsigned(i_reg)))*4)) xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+1) xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+2) xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+3);
+                  t_next <= new_plaintext_reg((to_integer(unsigned(i_reg)))*4);
+                  temp_next <= new_plaintext_reg(((to_integer(unsigned(i_reg)))*4)) xor new_plaintext_reg(((to_integer(unsigned(i_reg)))*4)+1) xor new_plaintext_reg(((to_integer(unsigned(i_reg)))*4)+2) xor new_plaintext_reg(((to_integer(unsigned(i_reg)))*4)+3);
             when mix_columns2 =>
-                   plaintext_next((to_integer(unsigned(i_reg)))*4) <= ((plaintext_reg((to_integer(unsigned(i_reg)))*4)(6 downto 0) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+1)(6 downto 0)) & '0') xor (std_logic_vector(resize((shift_right(unsigned(plaintext_reg((to_integer(unsigned(i_reg)))*4) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+1)), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor plaintext_reg((to_integer(unsigned(i_reg)))*4);
-                   plaintext_next(((to_integer(unsigned(i_reg)))*4)+1) <= ((plaintext_reg((to_integer(unsigned(i_reg)))*4+1)(6 downto 0) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+2)(6 downto 0)) & '0') xor (std_logic_vector(resize((shift_right(unsigned(plaintext_reg((to_integer(unsigned(i_reg)))*4+1) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+2)), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+1);
-                   plaintext_next(((to_integer(unsigned(i_reg)))*4)+2) <= ((plaintext_reg((to_integer(unsigned(i_reg)))*4+2) (6 downto 0) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+3)(6 downto 0)) & '0') xor (std_logic_vector(resize((shift_right(unsigned(plaintext_reg((to_integer(unsigned(i_reg)))*4+2) xor plaintext_reg((to_integer(unsigned(i_reg)))*4+3)), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+2);
-                   plaintext_next(((to_integer(unsigned(i_reg)))*4)+3) <= ((plaintext_reg((to_integer(unsigned(i_reg)))*4+3) (6 downto 0) xor t_reg(6 downto 0)) & '0') xor (std_logic_vector(resize((shift_right(unsigned(plaintext_reg((to_integer(unsigned(i_reg)))*4+3) xor t_reg), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor plaintext_reg(((to_integer(unsigned(i_reg)))*4)+3);
+                   new_plaintext_next((to_integer(unsigned(i_reg)))*4) <= ((new_plaintext_reg((to_integer(unsigned(i_reg)))*4)(6 downto 0) xor new_plaintext_reg((to_integer(unsigned(i_reg)))*4+1)(6 downto 0)) & '0') xor (std_logic_vector(resize((shift_right(unsigned(new_plaintext_reg((to_integer(unsigned(i_reg)))*4) xor new_plaintext_reg((to_integer(unsigned(i_reg)))*4+1)), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor new_plaintext_reg((to_integer(unsigned(i_reg)))*4);
+                   new_plaintext_next(((to_integer(unsigned(i_reg)))*4)+1) <= ((new_plaintext_reg((to_integer(unsigned(i_reg)))*4+1)(6 downto 0) xor new_plaintext_reg((to_integer(unsigned(i_reg)))*4+2)(6 downto 0)) & '0') xor (std_logic_vector(resize((shift_right(unsigned(new_plaintext_reg((to_integer(unsigned(i_reg)))*4+1) xor new_plaintext_reg((to_integer(unsigned(i_reg)))*4+2)), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor new_plaintext_reg(((to_integer(unsigned(i_reg)))*4)+1);
+                   new_plaintext_next(((to_integer(unsigned(i_reg)))*4)+2) <= ((new_plaintext_reg((to_integer(unsigned(i_reg)))*4+2) (6 downto 0) xor new_plaintext_reg((to_integer(unsigned(i_reg)))*4+3)(6 downto 0)) & '0') xor (std_logic_vector(resize((shift_right(unsigned(new_plaintext_reg((to_integer(unsigned(i_reg)))*4+2) xor new_plaintext_reg((to_integer(unsigned(i_reg)))*4+3)), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor new_plaintext_reg(((to_integer(unsigned(i_reg)))*4)+2);
+                   new_plaintext_next(((to_integer(unsigned(i_reg)))*4)+3) <= ((new_plaintext_reg((to_integer(unsigned(i_reg)))*4+3) (6 downto 0) xor t_reg(6 downto 0)) & '0') xor (std_logic_vector(resize((shift_right(unsigned(new_plaintext_reg((to_integer(unsigned(i_reg)))*4+3) xor t_reg), 7) * unsigned(CONST_TMP)), 8))) xor temp_reg xor new_plaintext_reg(((to_integer(unsigned(i_reg)))*4)+3);
                    if(to_integer(unsigned(i_reg)) = 3) then
                         i_next <= (others => '0');
                   else 
@@ -386,7 +400,7 @@ begin
             when add_round_key_round_1 =>
                  j_next <= (others => '0');
             when add_round_key_round_2 =>
-                 plaintext_next((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) <= plaintext_reg((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) xor  roundKey_reg((to_integer(unsigned(round_reg)))*Nb*4+(to_integer(unsigned(i_reg)))*Nb+(to_integer(unsigned(j_reg))));
+                 new_plaintext_next((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) <= new_plaintext_reg((to_integer(unsigned(i_reg)))*4+(to_integer(unsigned(j_reg)))) xor  roundKey_reg((to_integer(unsigned(round_reg)))*Nb*4+(to_integer(unsigned(i_reg)))*Nb+(to_integer(unsigned(j_reg))));
                  j_next <= (std_logic_vector(unsigned(j_reg) + 1));
             when add_round_key_round_3 =>
                  i_next <= (std_logic_vector(unsigned(i_reg) + 1));
@@ -403,14 +417,22 @@ begin
         
     end process;
   
-  
 
     --datapath: output
-    po_data_valid <= '1' when done_reg = '1' else '0';
-    po_ciphertext <= plaintext_reg(0) & plaintext_reg(1) & plaintext_reg(2) & plaintext_reg(3) & plaintext_reg(4) & plaintext_reg(5) & plaintext_reg(6) & plaintext_reg(7)
-                    & plaintext_reg(8) & plaintext_reg(9) & plaintext_reg(10) & plaintext_reg(11) & plaintext_reg(12) & plaintext_reg(13) & plaintext_reg(14) & plaintext_reg(15) 
-                    when done_reg = '1' else (others => '0');
+    po_done <= '1' when done_reg = '1' else '0';
     
+    process (pi_tready, new_plaintext_reg, done_reg) is
+    begin
+        if(pi_tready = '1' and done_reg = '1') then
+                po_tvalid <= '1';
+                po_ciphertext <= new_plaintext_reg(0) & new_plaintext_reg(1) & new_plaintext_reg(2) & new_plaintext_reg(3) & new_plaintext_reg(4) & new_plaintext_reg(5) & new_plaintext_reg(6) & new_plaintext_reg(7)
+                               & new_plaintext_reg(8) & new_plaintext_reg(9) & new_plaintext_reg(10) & new_plaintext_reg(11) & new_plaintext_reg(12) & new_plaintext_reg(13) 
+                               & new_plaintext_reg(14) & new_plaintext_reg(15);
+        else
+            po_tvalid <= '0';
+            po_ciphertext <= (others => '0');
+        end if;
+    end process;
 
 
 end Behavioral;
